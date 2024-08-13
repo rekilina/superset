@@ -403,21 +403,23 @@ export default function PivotTableChart(props: PivotTableProps) {
 
       const [key, val] = filtersEntries[filtersEntries.length - 1];
 
-      let updatedFilters = { ...(selectedFilters || {}) };
+      const updatedFilters = { ...(selectedFilters || {}) };
       // multi select
-      // if (selectedFilters && isActiveFilterValue(key, val)) {
-      //   updatedFilters[key] = selectedFilters[key].filter((x: DataRecordValue) => x !== val);
-      // } else {
-      //   updatedFilters[key] = [...(selectedFilters?.[key] || []), val];
-      // }
-      // single select
       if (selectedFilters && isActiveFilterValue(key, val)) {
-        updatedFilters = {};
+        updatedFilters[key] = selectedFilters[key].filter(
+          (x: DataRecordValue) => x !== val,
+        );
       } else {
-        updatedFilters = {
-          [key]: [val],
-        };
+        updatedFilters[key] = [...(selectedFilters?.[key] || []), val];
       }
+      // single select
+      // if (selectedFilters && isActiveFilterValue(key, val)) {
+      //   updatedFilters = {};
+      // } else {
+      //   updatedFilters = {
+      //     [key]: [val],
+      //   };
+      // }
       if (
         Array.isArray(updatedFilters[key]) &&
         updatedFilters[key].length === 0
