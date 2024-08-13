@@ -59,6 +59,8 @@ const CrossFilter = (props: {
     );
   };
 
+  console.log('filter', filter);
+
   return (
     <div
       key={`${filter.name}${filter.emitterId}`}
@@ -78,7 +80,7 @@ const CrossFilter = (props: {
         orientation={orientation || FilterBarOrientation.HORIZONTAL}
         onHighlightFilterSource={() => handleHighlightFilterSource(filter.path)}
       />
-      {(filter.column || filter.value) && (
+      {Object.keys(filter.selectedFilters).length && (
         <CrossFilterTag
           filter={filter}
           orientation={orientation}
