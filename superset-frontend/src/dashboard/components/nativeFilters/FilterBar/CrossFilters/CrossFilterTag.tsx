@@ -18,12 +18,7 @@
  */
 
 import React from 'react';
-import {
-  styled,
-  css,
-  useTheme,
-  useCSSTextTruncation,
-} from '@superset-ui/core';
+import { styled, css, useTheme, useCSSTextTruncation } from '@superset-ui/core';
 import { CrossFilterIndicator } from 'src/dashboard/components/nativeFilters/selectors';
 import { Tag } from 'src/components';
 import { Tooltip } from 'src/components/Tooltip';
