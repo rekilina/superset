@@ -59,7 +59,7 @@ const CrossFilter = (props: {
     );
   };
 
-  console.log('filter', filter);
+  // console.log('filter', filter);
 
   return (
     <div

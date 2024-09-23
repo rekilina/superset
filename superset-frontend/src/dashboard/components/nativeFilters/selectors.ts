@@ -70,7 +70,7 @@ export const extractLabel = (filter?: FilterState): string | null => {
   if (filter?.label && !filter?.label?.includes(undefined)) {
     return filter.label;
   }
-  if (filter?.value) {
+  if (filter?.value && !Array.isArray(filter?.value)) {
     return ensureIsArray(filter?.value).flat().join(', ');
   }
   return null;

@@ -60,6 +60,8 @@ export const crossFiltersSelector = (props: {
           value = ensureIsArray(formattedVal);
         } else if (UNARY_OPERATORS.includes(op as UnaryOperator)) {
           value = ensureIsArray(op);
+        } else if ('value' in filterIndicator && filterIndicator.value) {
+          value = ensureIsArray(filterIndicator.value);
         } else if ('val' in filter && filter.val) {
           value = ensureIsArray(filter.val);
         } else {
