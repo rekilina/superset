@@ -59,8 +59,6 @@ const CrossFilter = (props: {
     );
   };
 
-  // console.log('filter', filter);
-
   return (
     <div
       key={`${filter.name}${filter.emitterId}`}

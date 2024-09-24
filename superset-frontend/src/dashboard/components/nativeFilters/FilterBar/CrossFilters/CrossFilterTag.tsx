@@ -75,8 +75,6 @@ const CrossFilterTag = (props: {
     useCSSTextTruncation<HTMLSpanElement>();
   const [valueRef, valueIsTruncated] = useCSSTextTruncation<HTMLSpanElement>();
 
-  // console.log('filter', filter);
-
   return (
     <StyledTag
       css={css`
