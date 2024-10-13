@@ -35,9 +35,6 @@ const mockedProps: {
     value: 'Italy',
     status: IndicatorStatus.CrossFilterApplied,
     path: ['test-path'],
-    selectedFilters: {
-      country_name: 'Italy',
-    },
   },
   orientation: FilterBarOrientation.HORIZONTAL,
   removeCrossFilter: jest.fn(),
@@ -62,9 +59,6 @@ test('CrossFilterTag with adhoc column should render', () => {
         label: 'My column',
         sqlExpression: 'country_name',
         expressionType: 'SQL' as const,
-      },
-      selectedFilters: {
-        'My column': 'Italy',
       },
     },
   };

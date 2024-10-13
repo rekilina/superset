@@ -70,7 +70,7 @@ export const extractLabel = (filter?: FilterState): string | null => {
   if (filter?.label && !filter?.label?.includes(undefined)) {
     return filter.label;
   }
-  if (filter?.value && !Array.isArray(filter?.value)) {
+  if (filter?.value) {
     return ensureIsArray(filter?.value).flat().join(', ');
   }
   return null;
@@ -167,7 +167,10 @@ export type Indicator = {
 
 export type CrossFilterIndicator = Indicator & {
   emitterId: number;
-  selectedFilters: {
+  selectedFilters?: {
+    [key: string]: string;
+  };
+  labelMap?: {
     [key: string]: string;
   };
 };

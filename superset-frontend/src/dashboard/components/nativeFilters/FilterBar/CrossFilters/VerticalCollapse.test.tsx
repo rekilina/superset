@@ -34,9 +34,6 @@ const mockedProps: MockedProps = {
       value: 'Italy',
       status: IndicatorStatus.CrossFilterApplied,
       path: ['test-path'],
-      selectedFilters: {
-        country_name: 'Italy',
-      },
     },
     {
       name: 'test-b',
@@ -45,9 +42,6 @@ const mockedProps: MockedProps = {
       value: 'IT',
       status: IndicatorStatus.CrossFilterApplied,
       path: ['test-path-2'],
-      selectedFilters: {
-        country_code: 'IT',
-      },
     },
   ],
 };

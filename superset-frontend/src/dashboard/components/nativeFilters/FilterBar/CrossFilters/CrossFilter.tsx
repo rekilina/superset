@@ -78,7 +78,7 @@ const CrossFilter = (props: {
         orientation={orientation || FilterBarOrientation.HORIZONTAL}
         onHighlightFilterSource={() => handleHighlightFilterSource(filter.path)}
       />
-      {Object.keys(filter.selectedFilters).length && (
+      {(filter.column || filter.value || filter?.labelMap) && (
         <CrossFilterTag
           filter={filter}
           orientation={orientation}

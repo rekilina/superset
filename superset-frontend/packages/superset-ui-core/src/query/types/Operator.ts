@@ -18,7 +18,7 @@
  */
 
 /** List of operators that do not require another operand */
-export const UNARY_OPERATORS = ['IS NOT NULL', 'IS NULL'] as const;
+const UNARY_OPERATORS = ['IS NOT NULL', 'IS NULL'] as const;
 
 /** List of operators that require another operand that is a single value */
 const BINARY_OPERATORS = [

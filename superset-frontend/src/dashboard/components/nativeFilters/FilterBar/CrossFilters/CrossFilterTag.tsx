@@ -18,7 +18,14 @@
  */
 
 import React from 'react';
-import { styled, css, useTheme, useCSSTextTruncation } from '@superset-ui/core';
+import {
+  styled,
+  css,
+  useTheme,
+  useCSSTextTruncation,
+  getColumnLabel,
+  ensureIsArray,
+} from '@superset-ui/core';
 import { CrossFilterIndicator } from 'src/dashboard/components/nativeFilters/selectors';
 import { Tag } from 'src/components';
 import { Tooltip } from 'src/components/Tooltip';
@@ -26,9 +33,7 @@ import { FilterBarOrientation } from 'src/dashboard/types';
 import { ellipsisCss } from './styles';
 
 const StyledCrossFilterValue = styled.b`
-  ${({ theme }) => `
-    max-width: ${theme.gridUnit * 25}px;
-  `}
+  max-width: 100%;
   ${ellipsisCss}
 `;
 
@@ -69,11 +74,26 @@ const CrossFilterTag = (props: {
   removeCrossFilter: (filterId: number) => void;
 }) => {
   const { filter, orientation, removeCrossFilter } = props;
-  const { selectedFilters } = filter;
+  const { labelMap } = filter;
   const theme = useTheme();
   const [columnRef, columnIsTruncated] =
     useCSSTextTruncation<HTMLSpanElement>();
   const [valueRef, valueIsTruncated] = useCSSTextTruncation<HTMLSpanElement>();
+
+  const columnLabel = getColumnLabel(filter.column ?? '');
+
+  const renderCrossFilterTooltip = (value: string, columnLabel: string) => (
+    <span className="tooltip-wrapper">
+      <Tooltip title={columnIsTruncated ? columnLabel : null}>
+        <StyledCrossFilterColumn ref={columnRef}>
+          {columnLabel}
+        </StyledCrossFilterColumn>
+      </Tooltip>
+      <Tooltip title={valueIsTruncated ? value : null}>
+        <StyledCrossFilterValue ref={valueRef}>{value}</StyledCrossFilterValue>
+      </Tooltip>
+    </span>
+  );
 
   return (
     <StyledTag
@@ -90,23 +110,12 @@ const CrossFilterTag = (props: {
       onClose={() => removeCrossFilter(filter.emitterId)}
     >
       <span className="tag-wrapper">
-        {Object.keys(selectedFilters).map(columnLabel => {
-          const value = selectedFilters[columnLabel];
-          return (
-            <span className="tooltip-wrapper">
-              <Tooltip title={columnIsTruncated ? columnLabel : null}>
-                <StyledCrossFilterColumn ref={columnRef}>
-                  {columnLabel}
-                </StyledCrossFilterColumn>
-              </Tooltip>
-              <Tooltip title={valueIsTruncated ? value : null}>
-                <StyledCrossFilterValue ref={valueRef}>
-                  {value}
-                </StyledCrossFilterValue>
-              </Tooltip>
-            </span>
-          );
-        })}
+        {labelMap && Object.keys(labelMap).length
+          ? Object.keys(labelMap).map(columnLabel => {
+              const value = ensureIsArray(labelMap[columnLabel]).join(',');
+              return renderCrossFilterTooltip(value, columnLabel);
+            })
+          : renderCrossFilterTooltip(filter.value, columnLabel)}
       </span>
     </StyledTag>
   );

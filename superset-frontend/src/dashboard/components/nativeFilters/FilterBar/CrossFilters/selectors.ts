@@ -20,10 +20,8 @@
 import {
   DataMaskStateWithId,
   getColumnLabel,
-  ensureIsArray,
   JsonObject,
-  UNARY_OPERATORS,
-  UnaryOperator,
+  isDefined,
 } from '@superset-ui/core';
 import { DashboardLayout } from 'src/dashboard/types';
 import { CrossFilterIndicator, getCrossFilterIndicator } from '../../selectors';
@@ -49,31 +47,26 @@ export const crossFiltersSelector = (props: {
         dataMask[id],
         dashboardLayout,
       );
-      const selectedFilters = {};
-      filters?.forEach(filter => {
-        const { col: colRaw, formattedVal, op } = filter;
+
+      const labelMap = dataMask[id]?.filterState?.labelMap;
+      if (
+        isDefined(filterIndicator.column) &&
+        isDefined(filterIndicator.value)
+      ) {
         const verboseColName =
-          verboseMaps[id]?.[getColumnLabel(colRaw)] || getColumnLabel(colRaw);
-
-        let value;
-        if (formattedVal) {
-          value = ensureIsArray(formattedVal);
-        } else if (UNARY_OPERATORS.includes(op as UnaryOperator)) {
-          value = ensureIsArray(op);
-        } else if ('value' in filterIndicator && filterIndicator.value) {
-          value = ensureIsArray(filterIndicator.value);
-        } else if ('val' in filter && filter.val) {
-          value = ensureIsArray(filter.val);
-        } else {
-          value = ensureIsArray(undefined);
-        }
-
-        selectedFilters[verboseColName] = value.flatMap(String).join(', ');
-      });
+          verboseMaps[id]?.[getColumnLabel(filterIndicator.column)] ||
+          filterIndicator.column;
+        return {
+          ...filterIndicator,
+          column: verboseColName,
+          emitterId: id,
+          labelMap,
+        };
+      }
       return {
         ...filterIndicator,
         emitterId: id,
-        selectedFilters,
+        labelMap,
       };
     })
     .filter(Boolean) as CrossFilterIndicator[];
