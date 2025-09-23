@@ -35,11 +35,18 @@ export const crossFiltersSelector = (props: {
 
   return chartIds
     .map(chartId => {
+      const filters = dataMask[chartId]?.extraFormData?.filters || [];
+      if (!filters.length) {
+        return null;
+      }
+      const id = Number(chartId);
       const filterIndicator = getCrossFilterIndicator(
         chartId,
         dataMask[chartId],
         chartLayoutItems,
       );
+
+      const labelMap = dataMask[id]?.filterState?.labelMap;
       if (
         isDefined(filterIndicator.column) &&
         isDefined(filterIndicator.value)
@@ -50,10 +57,15 @@ export const crossFiltersSelector = (props: {
         return {
           ...filterIndicator,
           column: verboseColName,
-          emitterId: chartId,
+          emitterId: id,
+          labelMap,
         };
       }
-      return null;
+      return {
+        ...filterIndicator,
+        emitterId: id,
+        labelMap,
+      };
     })
     .filter(Boolean) as CrossFilterIndicator[];
 };

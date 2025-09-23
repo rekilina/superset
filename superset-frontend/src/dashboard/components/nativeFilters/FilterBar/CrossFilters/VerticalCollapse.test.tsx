@@ -17,10 +17,14 @@
  * under the License.
  */
 import { render, screen } from 'spec/helpers/testing-library';
-import { IndicatorStatus } from '../../selectors';
+import { CrossFilterIndicator, IndicatorStatus } from '../../selectors';
 import VerticalCollapse from './VerticalCollapse';
 
-const mockedProps = {
+type MockedProps = {
+  crossFilters: CrossFilterIndicator[];
+};
+
+const mockedProps: MockedProps = {
   crossFilters: [
     {
       name: 'test',

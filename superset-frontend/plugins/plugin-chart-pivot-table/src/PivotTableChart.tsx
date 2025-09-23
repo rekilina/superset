@@ -37,6 +37,7 @@ import {
 } from '@superset-ui/core';
 import { aggregatorTemplates, PivotTable, sortAs } from './react-pivottable';
 import {
+  DateFormatter,
   FilterType,
   MetricsLayoutEnum,
   PivotTableProps,
@@ -264,7 +265,7 @@ export default function PivotTableChart(props: PivotTableProps) {
   ]);
 
   const handleChange = useCallback(
-    (filters: SelectedFiltersType) => {
+    (filters: SelectedFiltersType, formattedFilter?: SelectedFiltersType) => {
       const filterKeys = Object.keys(filters);
       const groupby = [...groupbyRowsRaw, ...groupbyColumnsRaw];
       setDataMask({
@@ -303,6 +304,7 @@ export default function PivotTableChart(props: PivotTableProps) {
               : null,
           selectedFilters:
             filters && Object.keys(filters).length ? filters : null,
+          labelMap: formattedFilter,
         },
       });
     },
@@ -404,20 +406,14 @@ export default function PivotTableChart(props: PivotTableProps) {
 
       const [key, val] = filtersEntries[filtersEntries.length - 1];
 
-      let updatedFilters = { ...(selectedFilters || {}) };
+      const updatedFilters = { ...(selectedFilters || {}) };
       // multi select
-      // if (selectedFilters && isActiveFilterValue(key, val)) {
-      //   updatedFilters[key] = selectedFilters[key].filter((x: DataRecordValue) => x !== val);
-      // } else {
-      //   updatedFilters[key] = [...(selectedFilters?.[key] || []), val];
-      // }
-      // single select
       if (selectedFilters && isActiveFilterValue(key, val)) {
-        updatedFilters = {};
+        updatedFilters[key] = selectedFilters[key].filter(
+          (x: DataRecordValue) => x !== val,
+        );
       } else {
-        updatedFilters = {
-          [key]: [val],
-        };
+        updatedFilters[key] = [...(selectedFilters?.[key] || []), val];
       }
       if (
         Array.isArray(updatedFilters[key]) &&
@@ -425,7 +421,23 @@ export default function PivotTableChart(props: PivotTableProps) {
       ) {
         delete updatedFilters[key];
       }
-      handleChange(updatedFilters);
+
+      const formattedFilterEntries = Object.entries(updatedFilters).map(
+        ([key, values]) => {
+          const formatter: DateFormatter | null | undefined = dateFormatters
+            ? dateFormatters[key]
+            : null;
+          if (!formatter || !values) {
+            return [key, values];
+          }
+          // @ts-ignore
+          const formattedValues = formatter ? values.map(formatter) : values;
+          return [key, formattedValues];
+        },
+      );
+      const formattedFilter = Object.fromEntries(formattedFilterEntries);
+
+      handleChange(updatedFilters, formattedFilter);
     },
     [emitCrossFilters, selectedFilters, handleChange],
   );
