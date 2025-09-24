@@ -16,7 +16,8 @@
  * specific language governing permissions and limitations
  * under the License.
  */
-import { t } from '@superset-ui/core';
+import { nanoid } from 'nanoid';
+import { t, validateNonEmpty } from '@superset-ui/core';
 import {
   ControlPanelConfig,
   ControlPanelsContainerProps,
@@ -28,6 +29,12 @@ import {
   getStandardizedControls,
   sections,
   sharedControls,
+  xAxisForceCategoricalControl,
+  xAxisSortSeriesAscendingControl,
+  xAxisSortControl,
+  xAxisSortAscControl,
+  xAxisSortSeriesControl,
+  contributionModeControl,
 } from '@superset-ui/chart-controls';
 import {
   legendSection,
@@ -276,7 +283,65 @@ function createAxisControl(axis: 'x' | 'y'): ControlSetRow[] {
 
 const config: ControlPanelConfig = {
   controlPanelSections: [
-    sections.echartsTimeSeriesQueryWithXAxisSort,
+    {
+      label: t('Query'),
+      expanded: true,
+      controlSetRows: [
+        ['x_axis'],
+        ['time_grain_sqla'],
+        [xAxisForceCategoricalControl],
+        [xAxisSortControl],
+        [xAxisSortAscControl],
+        [xAxisSortSeriesControl],
+        [xAxisSortSeriesAscendingControl],
+        [
+          {
+            name: 'metrics',
+            config: {
+              type: 'CollectionControl',
+              label: t('Metrics'),
+              controlName: 'MetricCollectionItem',
+              validators: [
+                validateNonEmpty,
+                (value: any) => {
+                  console.log('validator', value);
+                  if (value?.length && value?.length > 5) {
+                    return t('Max 5 metric colletions allowed');
+                  }
+                  return false;
+                },
+              ],
+              mapStateToProps: state => {
+                const { datasource } = state;
+                console.log('datasource', datasource);
+                return {
+                  columns: datasource?.columns || [],
+                  savedMetrics: datasource?.metrics || [],
+                  datasource,
+                };
+              },
+              itemGenerator: () => ({
+                key: nanoid(11),
+                metrics: [],
+              }),
+              keyAccessor: (item: any) => item.key,
+              description: t(
+                'Each item represents a separate bar chart grid. Add multiple metrics to each item.',
+              ),
+            },
+          },
+        ],
+        ['groupby'],
+        [contributionModeControl],
+        ['adhoc_filters'],
+        ['limit'],
+        ['timeseries_limit_metric'],
+        ['order_desc'],
+        ['row_limit'],
+        ['truncate_metric'],
+        ['show_empty_columns'],
+      ],
+    },
     sections.advancedAnalyticsControls,
     sections.annotationsAndLayersControls,
     sections.forecastIntervalControls,

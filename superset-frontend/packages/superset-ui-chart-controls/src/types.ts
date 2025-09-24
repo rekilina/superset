@@ -172,6 +172,7 @@ export type InternalControlType =
   | 'ViewportControl'
   | 'VizTypeControl'
   | 'MetricsControl'
+  | 'MetricCollectionItem'
   | 'AdhocFilterControl'
   | 'FilterBoxItemControl'
   | 'DndColumnSelect'

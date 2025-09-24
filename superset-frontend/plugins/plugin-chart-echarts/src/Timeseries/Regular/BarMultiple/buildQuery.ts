@@ -66,13 +66,6 @@ export default function buildQuery(formData: QueryFormData) {
     // only add series limit metric if it's explicitly needed e.g. for sorting
     const extra_metrics = extractExtraMetrics(formData);
 
-    const pivotOperatorInRuntime: PostProcessingPivot = isTimeComparison(
-      formData,
-      baseQueryObject,
-    )
-      ? timeComparePivotOperator(formData, baseQueryObject)
-      : pivotOperator(formData, baseQueryObject);
-
     const columns = [
       ...(isXAxisSet(formData) ? ensureIsArray(getXAxisColumn(formData)) : []),
       ...ensureIsArray(groupby),
@@ -82,33 +75,145 @@ export default function buildQuery(formData: QueryFormData) {
       ? formData.time_compare
       : [];
 
-    return [
-      {
-        ...baseQueryObject,
-        metrics: [...(baseQueryObject.metrics || []), ...extra_metrics],
-        columns,
-        series_columns: groupby,
-        ...(isXAxisSet(formData) ? {} : { is_timeseries: true }),
+    // check if metrics exists and is an array of collections
+    if (
+      !formData.metrics ||
+      !Array.isArray(formData.metrics) ||
+      formData.metrics.length === 0
+    ) {
+      console.warn('No metric collections found, using baseQueryObject');
+
+      const pivotOperatorInRuntime: PostProcessingPivot = isTimeComparison(
+        formData,
+        baseQueryObject,
+      )
+        ? timeComparePivotOperator(formData, baseQueryObject)
+        : pivotOperator(formData, baseQueryObject);
+
+      return [
+        {
+          ...baseQueryObject,
+          metrics: [...(baseQueryObject.metrics || []), ...extra_metrics],
+          columns,
+          series_columns: groupby,
+          ...(isXAxisSet(formData) ? {} : { is_timeseries: true }),
+          orderby: normalizeOrderBy(baseQueryObject).orderby,
+          time_offsets,
+          /* Note that:
+            1. The resample, rolling, cum, timeCompare operators should be after pivot.
+            2. the flatOperator makes multiIndex Dataframe into flat Dataframe
+          */
+          post_processing: [
+            pivotOperatorInRuntime,
+            rollingWindowOperator(formData, baseQueryObject),
+            timeCompareOperator(formData, baseQueryObject),
+            resampleOperator(formData, baseQueryObject),
+            renameOperator(formData, baseQueryObject),
+            contributionOperator(formData, baseQueryObject, time_offsets),
+            sortOperator(formData, baseQueryObject),
+            flattenOperator(formData, baseQueryObject),
+            prophetOperator(formData, baseQueryObject),
+          ],
+        },
+      ];
+    }
+
+    // create a separate query for each metric collection
+    const queries = formData.metrics
+      .map((metricCollection, index) => {
+        console.log(`Processing metric collection ${index}:`, metricCollection);
+
+        const collectionMetrics = metricCollection?.metrics || [];
+
+        // skip empty collections
+        if (!collectionMetrics || collectionMetrics.length === 0) {
+          console.warn(`Collection ${index} has no metrics, skipping`);
+          return null;
+        }
+
+        console.log(`Collection ${index} metrics:`, collectionMetrics);
+
+        // create a temporary formData only with the metrics of this collection
+        const tempFormData = {
+          ...formData,
+          metrics: collectionMetrics, // replace collections with a flat array
+        };
+
+        // create a temporary baseQueryObject with the metrics of this collection
+        const tempBaseQueryObject = {
+          ...baseQueryObject,
+          metrics: [...collectionMetrics, ...extra_metrics],
+        };
+
+        const pivotOperatorInRuntime: PostProcessingPivot = isTimeComparison(
+          tempFormData,
+          tempBaseQueryObject,
+        )
+          ? timeComparePivotOperator(tempFormData, tempBaseQueryObject)
+          : pivotOperator(tempFormData, tempBaseQueryObject);
+
+        const query = {
+          ...tempBaseQueryObject,
+          columns,
+          series_columns: groupby,
+          ...(isXAxisSet(formData) ? {} : { is_timeseries: true }),
+          time_offsets,
+          /* Note that:
+            1. The resample, rolling, cum, timeCompare operators should be after pivot.
+            2. the flatOperator makes multiIndex Dataframe into flat Dataframe
+          */
+          post_processing: [
+            pivotOperatorInRuntime,
+            rollingWindowOperator(tempFormData, tempBaseQueryObject),
+            timeCompareOperator(tempFormData, tempBaseQueryObject),
+            resampleOperator(tempFormData, tempBaseQueryObject),
+            renameOperator(tempFormData, tempBaseQueryObject),
+            contributionOperator(
+              tempFormData,
+              tempBaseQueryObject,
+              time_offsets,
+            ),
+            sortOperator(tempFormData, tempBaseQueryObject),
+            flattenOperator(tempFormData, tempBaseQueryObject),
+            prophetOperator(tempFormData, tempBaseQueryObject),
+          ],
+        };
+
         // todo: move `normalizeOrderBy to extractQueryFields`
-        orderby: normalizeOrderBy(baseQueryObject).orderby,
-        time_offsets,
-        /* Note that:
-          1. The resample, rolling, cum, timeCompare operators should be after pivot.
-          2. the flatOperator makes multiIndex Dataframe into flat Dataframe
-        */
-        post_processing: [
-          pivotOperatorInRuntime,
-          rollingWindowOperator(formData, baseQueryObject),
-          timeCompareOperator(formData, baseQueryObject),
-          resampleOperator(formData, baseQueryObject),
-          renameOperator(formData, baseQueryObject),
-          contributionOperator(formData, baseQueryObject, time_offsets),
-          sortOperator(formData, baseQueryObject),
-          flattenOperator(formData, baseQueryObject),
-          // todo: move prophet before flatten
-          prophetOperator(formData, baseQueryObject),
-        ],
-      },
-    ];
+        const normalizedOrderBy = normalizeOrderBy(query);
+        query.orderby = normalizedOrderBy.orderby;
+
+        console.log(`Collection ${index} final query:`, query);
+
+        return query;
+      })
+      .filter(query => query !== null);
+
+    console.log('Generated queries:', queries);
+
+    return queries.length > 0
+      ? queries
+      : [
+          {
+            ...baseQueryObject,
+            metrics: [...(baseQueryObject.metrics || []), ...extra_metrics],
+            columns,
+            series_columns: groupby,
+            ...(isXAxisSet(formData) ? {} : { is_timeseries: true }),
+            orderby: normalizeOrderBy(baseQueryObject).orderby,
+            time_offsets,
+            post_processing: [
+              pivotOperator(formData, baseQueryObject),
+              rollingWindowOperator(formData, baseQueryObject),
+              timeCompareOperator(formData, baseQueryObject),
+              resampleOperator(formData, baseQueryObject),
+              renameOperator(formData, baseQueryObject),
+              contributionOperator(formData, baseQueryObject, time_offsets),
+              sortOperator(formData, baseQueryObject),
+              flattenOperator(formData, baseQueryObject),
+              prophetOperator(formData, baseQueryObject),
+            ],
+          },
+        ];
   });
 }
