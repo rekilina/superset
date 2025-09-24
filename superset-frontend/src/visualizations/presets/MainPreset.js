@@ -50,6 +50,7 @@ import {
   EchartsAreaChartPlugin,
   EchartsTimeseriesChartPlugin,
   EchartsTimeseriesBarChartPlugin,
+  EchartsTimeseriesBarMultipleChartPlugin,
   EchartsTimeseriesLineChartPlugin,
   EchartsTimeseriesScatterChartPlugin,
   EchartsTimeseriesSmoothLineChartPlugin,
@@ -140,6 +141,9 @@ export default class MainPreset extends Preset {
         }),
         new EchartsTimeseriesBarChartPlugin().configure({
           key: VizType.Bar,
+        }),
+        new EchartsTimeseriesBarMultipleChartPlugin().configure({
+          key: VizType.BarMultiple,
         }),
         new EchartsTimeseriesLineChartPlugin().configure({
           key: VizType.Line,

@@ -19,6 +19,7 @@
 export enum VizType {
   Area = 'echarts_area',
   Bar = 'echarts_timeseries_bar',
+  BarMultiple = 'echarts_timeseries_bar_multiple',
   BigNumber = 'big_number',
   BigNumberTotal = 'big_number_total',
   BigNumberPeriodOverPeriod = 'pop_kpi',
