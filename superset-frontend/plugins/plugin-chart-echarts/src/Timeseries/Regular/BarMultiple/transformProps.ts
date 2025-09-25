@@ -38,7 +38,7 @@ import {
   isPhysicalColumn,
   isTimeseriesAnnotationLayer,
   t,
-  TimeseriesChartDataResponseResult,
+  TimeseriesDataRecord,
   NumberFormats,
 } from '@superset-ui/core';
 import {
@@ -132,11 +132,8 @@ export default function transformProps(
     columnFormats = {},
     currencyFormats = {},
   } = datasource;
-  const [queryData] = queriesData;
-  const { data = [], label_map = {} } =
-    queryData as TimeseriesChartDataResponseResult;
-
-  const dataTypes = getColtypesMapping(queryData);
+  const [firstQueryData] = queriesData;
+  const dataTypes = getColtypesMapping(firstQueryData);
   const annotationData = getAnnotationData(chartProps);
 
   const {
@@ -152,6 +149,9 @@ export default function transformProps(
     logAxis,
     markerEnabled,
     markerSize,
+    /**
+     * metrics: [{metrics: [{ value: 'metric1', label: 'metric1' }, { value: 'metric2', label: 'metric2' }, { value: 'metric3', label: 'metric3' }]}, {metrics: [{ value: 'metric4', label: 'metric4' }, { value: 'metric5', label: 'metric5' }, { value: 'metric6', label: 'metric6' }}]}]
+     */
     metrics,
     minorSplitLine,
     minorTicks,
@@ -195,170 +195,341 @@ export default function transformProps(
   }: EchartsTimeseriesFormData = { ...DEFAULT_FORM_DATA, ...formData };
   const refs: Refs = {};
   const groupBy = ensureIsArray(groupby);
-  const labelMap: { [key: string]: string[] } = Object.entries(
-    label_map,
-  ).reduce((acc, entry) => {
-    if (
-      entry[1].length > groupBy.length &&
-      Array.isArray(timeCompare) &&
-      timeCompare.includes(entry[1][0])
-    ) {
-      entry[1].shift();
-    }
-    return { ...acc, [entry[0]]: entry[1] };
-  }, {});
+  const labelMapArray: { [key: string]: string[] }[] = queriesData.map(
+    queryData =>
+      Object.entries(
+        (queryData as any).label_map as { [key: string]: string[] },
+      ).reduce((acc, entry) => {
+        if (
+          entry[1].length > groupBy.length &&
+          Array.isArray(timeCompare) &&
+          timeCompare.includes(entry[1][0])
+        ) {
+          entry[1].shift();
+        }
+        return { ...acc, [entry[0]]: entry[1] };
+      }, {}),
+  );
+
   const colorScale = CategoricalColorNamespace.getScale(colorScheme as string);
-  const rebasedData = rebaseForecastDatum(data, verboseMap);
-  let xAxisLabel = getXAxisLabel(chartProps.rawFormData) as string;
-  if (
-    isPhysicalColumn(chartProps.rawFormData?.x_axis) &&
-    isDefined(verboseMap[xAxisLabel])
-  ) {
-    xAxisLabel = verboseMap[xAxisLabel];
-  }
-  const isHorizontal = orientation === OrientationType.Horizontal;
-  const { totalStackedValues, thresholdValues } = extractDataTotalValues(
-    rebasedData,
-    {
-      stack,
-      percentageThreshold,
-      xAxisCol: xAxisLabel,
-      legendState,
-    },
+  const rebasedDataArray = queriesData.map(queryData =>
+    rebaseForecastDatum(queryData.data as TimeseriesDataRecord[], verboseMap),
   );
-  const extraMetricLabels = extractExtraMetrics(chartProps.rawFormData).map(
-    getMetricLabel,
-  );
-
-  const isMultiSeries = groupBy.length || metrics?.length > 1;
-
-  const [rawSeries, sortedTotalValues, minPositiveValue] = extractSeries(
-    rebasedData,
-    {
-      fillNeighborValue: stack && !forecastEnabled ? 0 : undefined,
-      xAxis: xAxisLabel,
-      extraMetricLabels,
-      stack,
-      totalStackedValues,
-      isHorizontal,
-      sortSeriesType,
-      sortSeriesAscending,
-      xAxisSortSeries: isMultiSeries ? xAxisSortSeries : undefined,
-      xAxisSortSeriesAscending: isMultiSeries
-        ? xAxisSortSeriesAscending
-        : undefined,
-    },
-  );
-  const showValueIndexes = extractShowValueIndexes(rawSeries, {
-    stack,
-    onlyTotal,
-    isHorizontal,
-    legendState,
-  });
-  const seriesContexts = extractForecastSeriesContexts(
-    rawSeries.map(series => series.name as string),
-  );
-  const isAreaExpand = stack === StackControlsValue.Expand;
-  const xAxisDataType = dataTypes?.[xAxisLabel] ?? dataTypes?.[xAxisOrig];
-
-  const xAxisType = getAxisType(stack, xAxisForceCategorical, xAxisDataType);
-  const series: SeriesOption[] = [];
-
-  const forcePercentFormatter = Boolean(contributionMode || isAreaExpand);
-  const percentFormatter = forcePercentFormatter
-    ? getPercentFormatter(yAxisFormat)
-    : getPercentFormatter(NumberFormats.PERCENT_2_POINT);
-  const defaultFormatter = currencyFormat?.symbol
-    ? new CurrencyFormatter({ d3Format: yAxisFormat, currency: currencyFormat })
-    : getNumberFormatter(yAxisFormat);
-  const customFormatters = buildCustomFormatters(
-    metrics,
-    currencyFormats,
-    columnFormats,
-    yAxisFormat,
-    currencyFormat,
-  );
-
-  const array = ensureIsArray(chartProps.rawFormData?.time_compare);
-  const inverted = invert(verboseMap);
-
-  let patternIncrement = 0;
-
-  rawSeries.forEach(entry => {
-    const derivedSeries = isDerivedSeries(entry, chartProps.rawFormData);
-    const lineStyle: LineStyleOption = {};
-    if (derivedSeries) {
-      patternIncrement += 1;
-      // use a combination of dash and dot for the line style
-      lineStyle.type = [(patternIncrement % 5) + 1, (patternIncrement % 3) + 1];
-      lineStyle.opacity = OpacityEnum.DerivedSeries;
+  const xAxisLabelArray = metrics.map(metricCollection => {
+    const xAxisLabel = getXAxisLabel({
+      ...chartProps.rawFormData,
+      metrics: metricCollection.metrics,
+    }) as string;
+    if (
+      isPhysicalColumn(chartProps.rawFormData?.x_axis) &&
+      isDefined(verboseMap[xAxisLabel])
+    ) {
+      return verboseMap[xAxisLabel];
     }
+    return xAxisLabel;
+  });
 
-    const entryName = String(entry.name || '');
-    const seriesName = inverted[entryName] || entryName;
-    const colorScaleKey = getOriginalSeries(seriesName, array);
+  const isHorizontal = orientation === OrientationType.Horizontal;
 
-    const transformedSeries = transformSeries(
-      entry,
-      colorScale,
-      colorScaleKey,
+  // axis bounds need to be parsed to replace incompatible values with undefined
+  const [xAxisMin, xAxisMax] = (xAxisBounds || []).map(parseAxisBound);
+  let [yAxisMin, yAxisMax] = (yAxisBounds || []).map(parseAxisBound);
+
+  const totalStackedValuesArray: any[] = [];
+  const thresholdValuesArray: any[] = [];
+  queriesData.forEach((queryData, index) => {
+    const { totalStackedValues, thresholdValues } = extractDataTotalValues(
+      rebasedDataArray[index],
       {
-        area,
-        connectNulls: derivedSeries,
-        filterState,
-        seriesContexts,
-        markerEnabled,
-        markerSize,
-        areaOpacity: opacity,
-        seriesType,
-        legendState,
         stack,
-        formatter: forcePercentFormatter
-          ? percentFormatter
-          : (getCustomFormatter(
-              customFormatters,
-              metrics,
-              labelMap?.[seriesName]?.[0],
-            ) ?? defaultFormatter),
-        showValue,
-        onlyTotal,
-        totalStackedValues: sortedTotalValues,
-        showValueIndexes,
-        thresholdValues,
-        richTooltip,
-        sliceId,
-        isHorizontal,
-        lineStyle,
-        timeCompare: array,
-        timeShiftColor,
+        percentageThreshold,
+        xAxisCol: xAxisLabelArray[index],
+        legendState,
       },
     );
-    if (transformedSeries) {
-      if (stack === StackControlsValue.Stream) {
-        // bug in Echarts - `stackStrategy: 'all'` doesn't work with nulls, so we cast them to 0
-        series.push({
-          ...transformedSeries,
-          data: (transformedSeries.data as any).map(
-            (row: [string | number, number]) => [row[0], row[1] ?? 0],
-          ),
-        });
-      } else {
-        series.push(transformedSeries);
-      }
-    }
+    totalStackedValuesArray.push(totalStackedValues);
+    thresholdValuesArray.push(thresholdValues);
   });
+  const extraMetricLabelsArray = metrics.map(({ metrics }) =>
+    extractExtraMetrics({ ...chartProps.rawFormData, metrics }).map(
+      getMetricLabel,
+    ),
+  );
 
-  if (stack === StackControlsValue.Stream) {
-    const baselineSeries = getBaselineSeriesForStream(
-      series.map(entry => entry.data) as [string | number, number][][],
-      seriesType,
+  const isMultiSeriesArray = metrics.map(
+    ({ metrics }) => groupBy.length || metrics?.length > 1,
+  );
+
+  // Initialize arrays to collect data from all queries
+  const allSeries: SeriesOption[] = [];
+  const allRawSeries: any[] = [];
+  const allXAxes: any[] = [];
+  const allYAxes: any[] = [];
+  const allGrids: any[] = [];
+  let allMinPositiveValue: number | undefined;
+  let finalXAxisType: string | undefined;
+  let finalXAxisDataType: GenericDataType | undefined;
+  let finalXAxisLabel: string | undefined;
+
+  rebasedDataArray.forEach((rebasedData, index) => {
+    const [rawSeries, sortedTotalValues, minPositiveValue] = extractSeries(
+      rebasedData,
+      {
+        fillNeighborValue: stack && !forecastEnabled ? 0 : undefined,
+        xAxis: xAxisLabelArray[index],
+        extraMetricLabels: extraMetricLabelsArray[index],
+        stack,
+        totalStackedValues: totalStackedValuesArray[index],
+        isHorizontal,
+        sortSeriesType,
+        sortSeriesAscending,
+        xAxisSortSeries: isMultiSeriesArray[index]
+          ? xAxisSortSeries
+          : undefined,
+        xAxisSortSeriesAscending: isMultiSeriesArray[index]
+          ? xAxisSortSeriesAscending
+          : undefined,
+      },
+    );
+    const showValueIndexes = extractShowValueIndexes(rawSeries, {
+      stack,
+      onlyTotal,
+      isHorizontal,
+      legendState,
+    });
+
+    const seriesContexts = extractForecastSeriesContexts(
+      rawSeries.map(series => series.name as string),
+    );
+    const isAreaExpand = stack === StackControlsValue.Expand;
+    // const xAxisDataType = dataTypes?.[xAxisLabelArray[index]] ?? dataTypes?.[xAxisOrig];
+
+    // const xAxisType = getAxisType(stack, xAxisForceCategorical, xAxisDataType);
+    const series: SeriesOption[] = [];
+
+    const forcePercentFormatter = Boolean(contributionMode || isAreaExpand);
+    const percentFormatter = forcePercentFormatter
+      ? getPercentFormatter(yAxisFormat)
+      : getPercentFormatter(NumberFormats.PERCENT_2_POINT);
+    const defaultFormatter = currencyFormat?.symbol
+      ? new CurrencyFormatter({
+          d3Format: yAxisFormat,
+          currency: currencyFormat,
+        })
+      : getNumberFormatter(yAxisFormat);
+    const customFormatters = buildCustomFormatters(
+      metrics,
+      currencyFormats,
+      columnFormats,
+      yAxisFormat,
+      currencyFormat,
     );
 
-    series.unshift(baselineSeries);
-  }
+    const array = ensureIsArray(chartProps.rawFormData?.time_compare);
+    const inverted = invert(verboseMap);
+
+    let patternIncrement = 0;
+
+    // Store values for later use
+    allRawSeries.push(...rawSeries);
+    if (minPositiveValue !== undefined) {
+      allMinPositiveValue = allMinPositiveValue
+        ? Math.min(allMinPositiveValue, minPositiveValue)
+        : minPositiveValue;
+    }
+
+    // Use the first query's axis settings as default
+    if (index === 0) {
+      finalXAxisLabel = xAxisLabelArray[index];
+      finalXAxisDataType =
+        dataTypes?.[xAxisLabelArray[index]] ?? dataTypes?.[xAxisOrig];
+      finalXAxisType = getAxisType(
+        stack,
+        xAxisForceCategorical,
+        finalXAxisDataType,
+      );
+    }
+
+    rawSeries.forEach(entry => {
+      const derivedSeries = isDerivedSeries(entry, chartProps.rawFormData);
+      const lineStyle: LineStyleOption = {};
+      if (derivedSeries) {
+        patternIncrement += 1;
+        // use a combination of dash and dot for the line style
+        lineStyle.type = [
+          (patternIncrement % 5) + 1,
+          (patternIncrement % 3) + 1,
+        ];
+        lineStyle.opacity = OpacityEnum.DerivedSeries;
+      }
+
+      const entryName = String(entry.name || '');
+      const seriesName = inverted[entryName] || entryName;
+      const colorScaleKey = getOriginalSeries(seriesName, array);
+
+      const transformedSeries = transformSeries(
+        entry,
+        colorScale,
+        colorScaleKey,
+        {
+          area,
+          connectNulls: derivedSeries,
+          filterState,
+          seriesContexts,
+          markerEnabled,
+          markerSize,
+          areaOpacity: opacity,
+          seriesType,
+          legendState,
+          stack,
+          stackIdSuffix: metrics.length > 1 ? `_grid_${index}` : undefined, // Unique stack suffix for each grid
+          formatter: forcePercentFormatter
+            ? percentFormatter
+            : (getCustomFormatter(
+                customFormatters,
+                metrics,
+                (labelMapArray[index] as any)?.[seriesName]?.[0],
+              ) ?? defaultFormatter),
+          showValue,
+          onlyTotal,
+          totalStackedValues: sortedTotalValues,
+          showValueIndexes,
+          thresholdValues: thresholdValuesArray[index],
+          richTooltip,
+          sliceId,
+          isHorizontal,
+          lineStyle,
+          timeCompare: array,
+          timeShiftColor,
+        },
+      );
+      if (transformedSeries) {
+        if (stack === StackControlsValue.Stream) {
+          // bug in Echarts - `stackStrategy: 'all'` doesn't work with nulls, so we cast them to 0
+          series.push({
+            ...transformedSeries,
+            data: (transformedSeries.data as any).map(
+              (row: [string | number, number]) => [row[0], row[1] ?? 0],
+            ),
+          });
+        } else {
+          series.push(transformedSeries);
+        }
+      }
+    });
+    if (stack === StackControlsValue.Stream) {
+      const baselineSeries = getBaselineSeriesForStream(
+        series.map(entry => entry.data) as [string | number, number][][],
+        seriesType,
+      );
+
+      series.unshift(baselineSeries);
+    }
+
+    // Create grid layout for each metric collection
+    const gridHeight = 100 / metrics.length; // Divide height equally
+    const gridTop = index * gridHeight;
+
+    const currentGrid = {
+      left: '10%',
+      right: '10%',
+      top: `${gridTop}%`,
+      height: `${gridHeight - 5}%`, // Leave some space between grids
+    };
+
+    allGrids.push(currentGrid);
+
+    // Create axes for this grid
+    const currentXAxis = {
+      gridIndex: index,
+      type:
+        finalXAxisType ||
+        getAxisType(stack, xAxisForceCategorical, finalXAxisDataType),
+      name: xAxisTitle,
+      nameGap: convertInteger(xAxisTitleMargin),
+      nameLocation: 'middle',
+      axisLabel: {
+        hideOverlap: true,
+        formatter:
+          finalXAxisDataType === GenericDataType.Temporal
+            ? getXAxisFormatter(xAxisTimeFormat)
+            : String,
+        rotate: xAxisLabelRotation,
+      },
+      minorTick: { show: minorTicks },
+      minInterval:
+        (finalXAxisType ||
+          getAxisType(stack, xAxisForceCategorical, finalXAxisDataType)) ===
+          AxisType.Time && timeGrainSqla
+          ? TIMEGRAIN_TO_TIMESTAMP[
+              timeGrainSqla as keyof typeof TIMEGRAIN_TO_TIMESTAMP
+            ]
+          : 0,
+      ...getMinAndMaxFromBounds(
+        (finalXAxisType ||
+          getAxisType(
+            stack,
+            xAxisForceCategorical,
+            finalXAxisDataType,
+          )) as AxisType,
+        truncateXAxis,
+        xAxisMin,
+        xAxisMax,
+        seriesType,
+      ),
+    };
+
+    const currentYAxis = {
+      ...defaultYAxis,
+      gridIndex: index,
+      type: logAxis ? AxisType.Log : AxisType.Value,
+      min: yAxisMin,
+      max: yAxisMax,
+      minorTick: { show: minorTicks },
+      minorSplitLine: { show: minorSplitLine },
+      axisLabel: {
+        formatter: getYAxisFormatter(
+          metrics,
+          Boolean(contributionMode || isAreaExpand),
+          buildCustomFormatters(
+            metrics,
+            currencyFormats,
+            columnFormats,
+            yAxisFormat,
+            currencyFormat,
+          ),
+          currencyFormat?.symbol
+            ? new CurrencyFormatter({
+                d3Format: yAxisFormat,
+                currency: currencyFormat,
+              })
+            : getNumberFormatter(yAxisFormat),
+          yAxisFormat,
+        ),
+      },
+      scale: truncateYAxis,
+      name: yAxisTitle,
+      nameGap: convertInteger(yAxisTitleMargin),
+      nameLocation: yAxisTitlePosition === 'Left' ? 'middle' : 'end',
+    };
+
+    allXAxes.push(currentXAxis);
+    allYAxes.push(currentYAxis);
+
+    // Add axis indices to series
+    const seriesWithAxisIndices = series.map(s => ({
+      ...s,
+      xAxisIndex: isHorizontal ? index : index,
+      yAxisIndex: isHorizontal ? index : index,
+    }));
+
+    // Add series from this query to the overall collection
+    allSeries.push(...seriesWithAxisIndices);
+  });
+
   const selectedValues = (filterState.selectedValues || []).reduce(
     (acc: Record<string, number>, selectedValue: string) => {
-      const index = series.findIndex(({ name }) => name === selectedValue);
+      const index = allSeries.findIndex(({ name }) => name === selectedValue);
       return {
         ...acc,
         [index]: selectedValue,
@@ -367,26 +538,42 @@ export default function transformProps(
     {},
   );
 
+  // default to 0-100% range when doing row-level contribution chart
+  const isAreaExpand = stack === StackControlsValue.Expand;
+  if ((contributionMode === 'row' || isAreaExpand) && stack) {
+    if (yAxisMin === undefined) yAxisMin = 0;
+    if (yAxisMax === undefined) yAxisMax = 1;
+  } else if (
+    logAxis &&
+    yAxisMin === undefined &&
+    allMinPositiveValue !== undefined
+  ) {
+    yAxisMin = calculateLowerLogTick(allMinPositiveValue);
+  }
+
+  // Handle annotations - use first query's data for annotations
+  const firstRebasedData = rebasedDataArray[0];
+
   annotationLayers
     .filter((layer: AnnotationLayer) => layer.show)
     .forEach((layer: AnnotationLayer) => {
       if (isFormulaAnnotationLayer(layer))
-        series.push(
+        allSeries.push(
           transformFormulaAnnotation(
             layer,
-            data,
-            xAxisLabel,
-            xAxisType,
+            firstRebasedData as TimeseriesDataRecord[],
+            finalXAxisLabel!,
+            finalXAxisType as AxisType,
             colorScale,
             sliceId,
             orientation,
           ),
         );
       else if (isIntervalAnnotationLayer(layer)) {
-        series.push(
+        allSeries.push(
           ...transformIntervalAnnotation(
             layer,
-            data,
+            firstRebasedData as TimeseriesDataRecord[],
             annotationData,
             colorScale,
             theme,
@@ -395,10 +582,10 @@ export default function transformProps(
           ),
         );
       } else if (isEventAnnotationLayer(layer)) {
-        series.push(
+        allSeries.push(
           ...transformEventAnnotation(
             layer,
-            data,
+            firstRebasedData as TimeseriesDataRecord[],
             annotationData,
             colorScale,
             theme,
@@ -407,11 +594,11 @@ export default function transformProps(
           ),
         );
       } else if (isTimeseriesAnnotationLayer(layer)) {
-        series.push(
+        allSeries.push(
           ...transformTimeseriesAnnotation(
             layer,
             markerSize,
-            data,
+            firstRebasedData as TimeseriesDataRecord[],
             annotationData,
             colorScale,
             sliceId,
@@ -421,28 +608,12 @@ export default function transformProps(
       }
     });
 
-  // axis bounds need to be parsed to replace incompatible values with undefined
-  const [xAxisMin, xAxisMax] = (xAxisBounds || []).map(parseAxisBound);
-  let [yAxisMin, yAxisMax] = (yAxisBounds || []).map(parseAxisBound);
-
-  // default to 0-100% range when doing row-level contribution chart
-  if ((contributionMode === 'row' || isAreaExpand) && stack) {
-    if (yAxisMin === undefined) yAxisMin = 0;
-    if (yAxisMax === undefined) yAxisMax = 1;
-  } else if (
-    logAxis &&
-    yAxisMin === undefined &&
-    minPositiveValue !== undefined
-  ) {
-    yAxisMin = calculateLowerLogTick(minPositiveValue);
-  }
-
   const tooltipFormatter =
-    xAxisDataType === GenericDataType.Temporal
+    finalXAxisDataType === GenericDataType.Temporal
       ? getTooltipTimeFormatter(tooltipTimeFormat)
       : String;
   const xAxisFormatter =
-    xAxisDataType === GenericDataType.Temporal
+    finalXAxisDataType === GenericDataType.Temporal
       ? getXAxisFormatter(xAxisTimeFormat)
       : String;
 
@@ -469,7 +640,7 @@ export default function transformProps(
     isHorizontal,
   );
 
-  const legendData = rawSeries
+  const legendData = allRawSeries
     .filter(
       entry =>
         extractForecastSeriesContext(entry.name || '').type ===
@@ -478,67 +649,46 @@ export default function transformProps(
     .map(entry => entry.name || '')
     .concat(extractAnnotationLabels(annotationLayers, annotationData));
 
-  let xAxis: any = {
-    type: xAxisType,
-    name: xAxisTitle,
-    nameGap: convertInteger(xAxisTitleMargin),
-    nameLocation: 'middle',
-    axisLabel: {
-      hideOverlap: true,
-      formatter: xAxisFormatter,
-      rotate: xAxisLabelRotation,
-    },
-    minorTick: { show: minorTicks },
-    minInterval:
-      xAxisType === AxisType.Time && timeGrainSqla
-        ? TIMEGRAIN_TO_TIMESTAMP[
-            timeGrainSqla as keyof typeof TIMEGRAIN_TO_TIMESTAMP
-          ]
-        : 0,
-    ...getMinAndMaxFromBounds(
-      xAxisType,
-      truncateXAxis,
-      xAxisMin,
-      xAxisMax,
-      seriesType,
-    ),
-  };
-
-  let yAxis: any = {
-    ...defaultYAxis,
-    type: logAxis ? AxisType.Log : AxisType.Value,
-    min: yAxisMin,
-    max: yAxisMax,
-    minorTick: { show: minorTicks },
-    minorSplitLine: { show: minorSplitLine },
-    axisLabel: {
-      formatter: getYAxisFormatter(
-        metrics,
-        forcePercentFormatter,
-        customFormatters,
-        defaultFormatter,
-        yAxisFormat,
-      ),
-    },
-    scale: truncateYAxis,
-    name: yAxisTitle,
-    nameGap: convertInteger(yAxisTitleMargin),
-    nameLocation: yAxisTitlePosition === 'Left' ? 'middle' : 'end',
-  };
+  // Handle horizontal orientation by swapping axes
+  let finalXAxes = allXAxes;
+  let finalYAxes = allYAxes;
 
   if (isHorizontal) {
-    [xAxis, yAxis] = [yAxis, xAxis];
-    [padding.bottom, padding.left] = [padding.left, padding.bottom];
+    finalXAxes = allYAxes.map(axis => ({ ...axis, type: axis.type }));
+    finalYAxes = allXAxes.map(axis => ({ ...axis, type: axis.type }));
+
+    // Update grid padding for horizontal orientation
+    allGrids.forEach((grid, idx) => {
+      const updatedGrid = { ...grid };
+      updatedGrid.bottom = grid.left || '10%';
+      updatedGrid.left = grid.bottom || '10%';
+      allGrids[idx] = updatedGrid;
+    });
   }
 
   const echartOptions: EChartsCoreOption = {
     useUTC: true,
-    grid: {
-      ...defaultGrid,
-      ...padding,
-    },
-    xAxis,
-    yAxis,
+    grid:
+      allGrids.length > 1
+        ? allGrids
+        : {
+            ...defaultGrid,
+            ...padding,
+          },
+    xAxis:
+      allGrids.length > 1
+        ? finalXAxes
+        : finalXAxes[0] || {
+            type: AxisType.Category,
+            name: xAxisTitle,
+          },
+    yAxis:
+      allGrids.length > 1
+        ? finalYAxes
+        : finalYAxes[0] || {
+            type: logAxis ? AxisType.Log : AxisType.Value,
+            name: yAxisTitle,
+          },
     tooltip: {
       ...getDefaultTooltip(refs),
       show: !inContextMenu,
@@ -563,9 +713,25 @@ export default function transformProps(
             value.forecastTrend || value.forecastLower || value.forecastUpper,
         );
 
-        const formatter = forcePercentFormatter
-          ? percentFormatter
-          : (getCustomFormatter(customFormatters, metrics) ?? defaultFormatter);
+        const formatter =
+          contributionMode || isAreaExpand
+            ? getPercentFormatter(yAxisFormat)
+            : (getCustomFormatter(
+                buildCustomFormatters(
+                  metrics,
+                  currencyFormats,
+                  columnFormats,
+                  yAxisFormat,
+                  currencyFormat,
+                ),
+                metrics,
+              ) ??
+              (currencyFormat?.symbol
+                ? new CurrencyFormatter({
+                    d3Format: yAxisFormat,
+                    currency: currencyFormat,
+                  })
+                : getNumberFormatter(yAxisFormat)));
 
         const rows: string[][] = [];
         const total = Object.values(forecastValues).reduce(
@@ -573,9 +739,12 @@ export default function transformProps(
             value.observation !== undefined ? acc + value.observation : acc,
           0,
         );
+        const isMultiSeries = isMultiSeriesArray.some(Boolean);
         const allowTotal = Boolean(isMultiSeries) && richTooltip && !isForecast;
         const showPercentage =
-          allowTotal && !forcePercentFormatter && showTooltipPercentage;
+          allowTotal &&
+          !(contributionMode || isAreaExpand) &&
+          showTooltipPercentage;
         const keys = Object.keys(forecastValues);
         let focusedRow;
         sortedKeys
@@ -592,7 +761,9 @@ export default function transformProps(
             });
             if (showPercentage && value.observation !== undefined) {
               row.push(
-                percentFormatter.format(value.observation / (total || 1)),
+                getPercentFormatter(NumberFormats.PERCENT_2_POINT).format(
+                  value.observation / (total || 1),
+                ),
               );
             }
             rows.push(row);
@@ -609,7 +780,9 @@ export default function transformProps(
         if (allowTotal && showTooltipTotal) {
           const totalRow = ['Total', formatter.format(total)];
           if (showPercentage) {
-            totalRow.push(percentFormatter.format(1));
+            totalRow.push(
+              getPercentFormatter(NumberFormats.PERCENT_2_POINT).format(1),
+            );
           }
           rows.push(totalRow);
         }
@@ -629,7 +802,7 @@ export default function transformProps(
       scrollDataIndex: legendIndex || 0,
       data: legendData as string[],
     },
-    series: dedupSeries(reorderForecastSeries(series) as SeriesOption[]),
+    series: dedupSeries(reorderForecastSeries(allSeries) as SeriesOption[]),
     toolbox: {
       show: zoomable,
       top: TIMESERIES_CONSTANTS.toolboxTop,
@@ -651,20 +824,20 @@ export default function transformProps(
             start: TIMESERIES_CONSTANTS.dataZoomStart,
             end: TIMESERIES_CONSTANTS.dataZoomEnd,
             bottom: TIMESERIES_CONSTANTS.zoomBottom,
-            yAxisIndex: isHorizontal ? 0 : undefined,
+            yAxisIndex: isHorizontal
+              ? Array.from({ length: allGrids.length }, (_, i) => i)
+              : undefined,
+            xAxisIndex: !isHorizontal
+              ? Array.from({ length: allGrids.length }, (_, i) => i)
+              : undefined,
           },
-          {
-            type: 'inside',
-            yAxisIndex: 0,
+          ...allGrids.map((_, index) => ({
+            type: 'inside' as const,
+            yAxisIndex: index,
+            xAxisIndex: index,
             zoomOnMouseWheel: false,
             moveOnMouseWheel: true,
-          },
-          {
-            type: 'inside',
-            xAxisIndex: 0,
-            zoomOnMouseWheel: false,
-            moveOnMouseWheel: true,
-          },
+          })),
         ]
       : [],
   };
@@ -679,7 +852,7 @@ export default function transformProps(
     formData,
     groupby: groupBy,
     height,
-    labelMap,
+    labelMap: labelMapArray[0] || {},
     selectedValues,
     setDataMask,
     setControlValue,
@@ -690,8 +863,8 @@ export default function transformProps(
     onFocusedSeries,
     xValueFormatter: tooltipFormatter,
     xAxis: {
-      label: xAxisLabel,
-      type: xAxisType,
+      label: finalXAxisLabel || '',
+      type: (finalXAxisType as AxisType) || AxisType.Category,
     },
     refs,
     coltypeMapping: dataTypes,
