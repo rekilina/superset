@@ -270,6 +270,7 @@ export default function transformProps(
   let finalXAxisType: string | undefined;
   let finalXAxisDataType: GenericDataType | undefined;
   let finalXAxisLabel: string | undefined;
+  let currentSeriesOffset = 0; // Track series offset for showValueIndexes
 
   rebasedDataArray.forEach((rebasedData, index) => {
     const [rawSeries, sortedTotalValues, minPositiveValue] = extractSeries(
@@ -297,6 +298,11 @@ export default function transformProps(
       isHorizontal,
       legendState,
     });
+
+    // Adjust showValueIndexes to account for series offset in the global series array
+    const adjustedShowValueIndexes = showValueIndexes.map(idx =>
+      idx !== undefined ? idx + currentSeriesOffset : idx,
+    );
 
     const seriesContexts = extractForecastSeriesContexts(
       rawSeries.map(series => series.name as string),
@@ -393,7 +399,7 @@ export default function transformProps(
           showValue,
           onlyTotal,
           totalStackedValues: sortedTotalValues,
-          showValueIndexes,
+          showValueIndexes: adjustedShowValueIndexes,
           thresholdValues: thresholdValuesArray[index],
           richTooltip,
           sliceId,
@@ -438,7 +444,7 @@ export default function transformProps(
         left: `${gridLeft}%`,
         width: `${gridWidth - 5}%`, // Leave some space between grids
         top: '10%',
-        bottom: '10%', // Leave space for X axis at bottom
+        bottom: '15%', // Leave space for X axis at bottom
       };
     } else {
       // Vertical layout: arrange grids top to bottom
@@ -446,7 +452,7 @@ export default function transformProps(
       const gridTop = 10 + index * gridHeight;
 
       currentGrid = {
-        left: '5%',
+        left: '10%',
         right: '0%',
         top: `${gridTop}%`,
         height: `${gridHeight - 5}%`, // Leave some space between grids
@@ -553,6 +559,9 @@ export default function transformProps(
 
     // Add series from this query to the overall collection
     allSeries.push(...seriesWithAxisIndices);
+
+    // Update series offset for next grid
+    currentSeriesOffset += series.length;
   });
 
   const selectedValues = (filterState.selectedValues || []).reduce(
