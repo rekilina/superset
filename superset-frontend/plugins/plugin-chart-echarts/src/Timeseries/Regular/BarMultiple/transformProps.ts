@@ -257,7 +257,7 @@ export default function transformProps(
   );
 
   const isMultiSeriesArray = metrics.map(
-    ({ metrics }) => groupBy.length || metrics?.length > 1,
+    ({ metrics }) => groupBy.length || metrics?.length > 0,
   );
 
   // Initialize arrays to collect data from all queries
@@ -271,6 +271,9 @@ export default function transformProps(
   let finalXAxisDataType: GenericDataType | undefined;
   let finalXAxisLabel: string | undefined;
   let currentSeriesOffset = 0; // Track series offset for showValueIndexes
+
+  // Get inverted verboseMap for series name processing
+  const inverted = invert(verboseMap);
 
   rebasedDataArray.forEach((rebasedData, index) => {
     const [rawSeries, sortedTotalValues, minPositiveValue] = extractSeries(
@@ -292,6 +295,28 @@ export default function transformProps(
           : undefined,
       },
     );
+
+    // Modify series names to include metric name when we have multiple collections
+    const hasMultipleCollections = metrics.length > 1;
+    const currentMetrics = metrics[index]?.metrics || [];
+
+    if (hasMultipleCollections && currentMetrics.length === 1) {
+      const metricLabel = getMetricLabel(currentMetrics[0]);
+      rawSeries.forEach(series => {
+        const originalName = String(series.name || '');
+        const processedName = inverted[originalName] || originalName;
+
+        // If series name doesn't already contain metric name, prepend it
+        if (!processedName.includes(metricLabel)) {
+          const newName =
+            groupBy.length > 0
+              ? `${metricLabel}, ${processedName}`
+              : metricLabel;
+          (series as any).name = newName;
+        }
+      });
+    }
+
     const showValueIndexes = extractShowValueIndexes(rawSeries, {
       stack,
       onlyTotal,
@@ -332,7 +357,6 @@ export default function transformProps(
     );
 
     const array = ensureIsArray(chartProps.rawFormData?.time_compare);
-    const inverted = invert(verboseMap);
 
     let patternIncrement = 0;
 
