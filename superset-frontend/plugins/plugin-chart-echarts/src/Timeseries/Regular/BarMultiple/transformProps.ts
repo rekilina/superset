@@ -427,14 +427,14 @@ export default function transformProps(
     }
 
     // Create grid layout for each metric collection
-    const gridHeight = 100 / metrics.length; // Divide height equally
-    const gridTop = index * gridHeight;
+    const gridHeight = 90 / metrics.length; // Divide height equally
+    const gridTop = 10 + index * gridHeight;
 
     const currentGrid = {
       left: '10%',
       right: '10%',
       top: `${gridTop}%`,
-      height: `${gridHeight - 5}%`, // Leave some space between grids
+      height: `${gridHeight - 10}%`, // Leave some space between grids
     };
 
     allGrids.push(currentGrid);
