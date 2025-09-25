@@ -427,28 +427,49 @@ export default function transformProps(
     }
 
     // Create grid layout for each metric collection
-    const gridHeight = 90 / metrics.length; // Divide height equally
-    const gridTop = 10 + index * gridHeight;
+    let currentGrid;
 
-    const currentGrid = {
-      left: '10%',
-      right: '10%',
-      top: `${gridTop}%`,
-      height: `${gridHeight - 10}%`, // Leave some space between grids
-    };
+    if (isHorizontal) {
+      // Horizontal layout: arrange grids left to right
+      const gridWidth = 90 / metrics.length; // Divide width equally (leaving margins)
+      const gridLeft = 10 + index * gridWidth;
+
+      currentGrid = {
+        left: `${gridLeft}%`,
+        width: `${gridWidth - 5}%`, // Leave some space between grids
+        top: '10%',
+        bottom: '10%', // Leave space for X axis at bottom
+      };
+    } else {
+      // Vertical layout: arrange grids top to bottom
+      const gridHeight = 80 / metrics.length; // Divide height equally (leaving margins)
+      const gridTop = 10 + index * gridHeight;
+
+      currentGrid = {
+        left: '5%',
+        right: '0%',
+        top: `${gridTop}%`,
+        height: `${gridHeight - 5}%`, // Leave some space between grids
+      };
+    }
 
     allGrids.push(currentGrid);
 
-    // Create axes for this grid
+    // Create X axis for this grid
+    const shouldShowXAxis = isHorizontal
+      ? index === 0 // Horizontal: show on first (leftmost) grid
+      : index === metrics.length - 1; // Vertical: show on last (bottommost) grid
+
     const currentXAxis = {
       gridIndex: index,
       type:
         finalXAxisType ||
         getAxisType(stack, xAxisForceCategorical, finalXAxisDataType),
-      name: xAxisTitle,
+      name: shouldShowXAxis ? xAxisTitle : '', // Only show title on designated grid
       nameGap: convertInteger(xAxisTitleMargin),
       nameLocation: 'middle',
       axisLabel: {
+        show: shouldShowXAxis, // Only show labels on designated grid
         hideOverlap: true,
         formatter:
           finalXAxisDataType === GenericDataType.Temporal
@@ -456,7 +477,13 @@ export default function transformProps(
             : String,
         rotate: xAxisLabelRotation,
       },
-      minorTick: { show: minorTicks },
+      axisLine: {
+        show: shouldShowXAxis, // Only show line on designated grid
+      },
+      axisTick: {
+        show: shouldShowXAxis, // Only show ticks on designated grid
+      },
+      minorTick: { show: minorTicks && shouldShowXAxis },
       minInterval:
         (finalXAxisType ||
           getAxisType(stack, xAxisForceCategorical, finalXAxisDataType)) ===
@@ -513,14 +540,15 @@ export default function transformProps(
       nameLocation: yAxisTitlePosition === 'Left' ? 'middle' : 'end',
     };
 
+    // Create both X and Y axes for each grid
     allXAxes.push(currentXAxis);
     allYAxes.push(currentYAxis);
 
     // Add axis indices to series
     const seriesWithAxisIndices = series.map(s => ({
       ...s,
-      xAxisIndex: isHorizontal ? index : index,
-      yAxisIndex: isHorizontal ? index : index,
+      xAxisIndex: isHorizontal ? index : index, // Each grid has its own X axis
+      yAxisIndex: isHorizontal ? index : index, // Each grid has its own Y axis
     }));
 
     // Add series from this query to the overall collection
@@ -612,10 +640,6 @@ export default function transformProps(
     finalXAxisDataType === GenericDataType.Temporal
       ? getTooltipTimeFormatter(tooltipTimeFormat)
       : String;
-  const xAxisFormatter =
-    finalXAxisDataType === GenericDataType.Temporal
-      ? getXAxisFormatter(xAxisTimeFormat)
-      : String;
 
   const {
     setDataMask = () => {},
@@ -654,16 +678,9 @@ export default function transformProps(
   let finalYAxes = allYAxes;
 
   if (isHorizontal) {
+    // For horizontal orientation, swap axes
     finalXAxes = allYAxes.map(axis => ({ ...axis, type: axis.type }));
     finalYAxes = allXAxes.map(axis => ({ ...axis, type: axis.type }));
-
-    // Update grid padding for horizontal orientation
-    allGrids.forEach((grid, idx) => {
-      const updatedGrid = { ...grid };
-      updatedGrid.bottom = grid.left || '10%';
-      updatedGrid.left = grid.bottom || '10%';
-      allGrids[idx] = updatedGrid;
-    });
   }
 
   const echartOptions: EChartsCoreOption = {
@@ -824,17 +841,13 @@ export default function transformProps(
             start: TIMESERIES_CONSTANTS.dataZoomStart,
             end: TIMESERIES_CONSTANTS.dataZoomEnd,
             bottom: TIMESERIES_CONSTANTS.zoomBottom,
-            yAxisIndex: isHorizontal
-              ? Array.from({ length: allGrids.length }, (_, i) => i)
-              : undefined,
-            xAxisIndex: !isHorizontal
-              ? Array.from({ length: allGrids.length }, (_, i) => i)
-              : undefined,
+            // Zoom all X axes (time/category data) synchronously
+            xAxisIndex: Array.from({ length: allGrids.length }, (_, i) => i),
           },
           ...allGrids.map((_, index) => ({
             type: 'inside' as const,
-            yAxisIndex: index,
             xAxisIndex: index,
+            yAxisIndex: index,
             zoomOnMouseWheel: false,
             moveOnMouseWheel: true,
           })),
