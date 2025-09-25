@@ -81,8 +81,6 @@ export default function buildQuery(formData: QueryFormData) {
       !Array.isArray(formData.metrics) ||
       formData.metrics.length === 0
     ) {
-      console.warn('No metric collections found, using baseQueryObject');
-
       const pivotOperatorInRuntime: PostProcessingPivot = isTimeComparison(
         formData,
         baseQueryObject,
@@ -121,17 +119,12 @@ export default function buildQuery(formData: QueryFormData) {
     // create a separate query for each metric collection
     const queries = formData.metrics
       .map((metricCollection, index) => {
-        console.log(`Processing metric collection ${index}:`, metricCollection);
-
         const collectionMetrics = metricCollection?.metrics || [];
 
         // skip empty collections
         if (!collectionMetrics || collectionMetrics.length === 0) {
-          console.warn(`Collection ${index} has no metrics, skipping`);
           return null;
         }
-
-        console.log(`Collection ${index} metrics:`, collectionMetrics);
 
         // create a temporary formData only with the metrics of this collection
         const tempFormData = {
@@ -183,13 +176,9 @@ export default function buildQuery(formData: QueryFormData) {
         const normalizedOrderBy = normalizeOrderBy(query);
         query.orderby = normalizedOrderBy.orderby;
 
-        console.log(`Collection ${index} final query:`, query);
-
         return query;
       })
       .filter(query => query !== null);
-
-    console.log('Generated queries:', queries);
 
     return queries.length > 0
       ? queries
